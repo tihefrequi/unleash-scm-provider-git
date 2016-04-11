@@ -5,19 +5,25 @@ import java.io.IOException;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 import com.itemis.maven.plugins.unleash.scm.ScmProvider;
+import com.itemis.maven.plugins.unleash.scm.ScmProviderType;
 
+@ScmProviderType("git")
 public class ScmProviderGit implements ScmProvider {
   private Git git;
 
   @Override
-  public void initialize(String workingDirectory) {
+  public void initialize(File workingDirectory) {
+    FileRepositoryBuilder builder = new FileRepositoryBuilder();
     try {
-      this.git = Git.open(new File(workingDirectory));
+      Repository repo = builder.findGitDir(workingDirectory).build();
+      this.git = Git.wrap(repo);
     } catch (IOException e) {
-      throw new IllegalStateException("Could not initialize Git repository at " + workingDirectory, e);
+      e.printStackTrace();
     }
   }
 
@@ -30,13 +36,12 @@ public class ScmProviderGit implements ScmProvider {
 
   @Override
   public String getLocalRevision() {
-    RevCommit revCommit;
     try {
-      revCommit = this.git.log().call().iterator().next();
+      RevCommit revCommit = this.git.log().call().iterator().next();
+      return revCommit.getName();
     } catch (GitAPIException e) {
       throw new IllegalStateException("Could not determine the last revision commit of the local repository.", e);
     }
-    return revCommit.getName();
   }
 
   @Override
