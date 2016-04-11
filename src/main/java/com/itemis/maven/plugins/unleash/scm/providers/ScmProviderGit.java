@@ -1,39 +1,47 @@
 package com.itemis.maven.plugins.unleash.scm.providers;
 
 import java.io.File;
+import java.io.IOException;
 
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 import com.itemis.maven.plugins.unleash.scm.ScmProvider;
 
 public class ScmProviderGit implements ScmProvider {
+  private Git git;
 
-  public String getLocalRevision() {
-    String revision = "";
+  @Override
+  public void initialize(String workingDirectory) {
     try {
-      FileRepositoryBuilder builder = new FileRepositoryBuilder();
-      Repository repo = builder
-          .setGitDir(new File("C:/Users/Stanley/itemis/Projekte/VOEB/unleash-maven-plugin/repo-scm-provider-git/.git"))
-          .readEnvironment().findGitDir().build();
-      Git git = new Git(repo);
-      RevCommit revCommit = git.log().call().iterator().next();
-      revision = revCommit.getName();
-    } catch (Exception e) {
-      e.printStackTrace();
+      this.git = Git.open(new File(workingDirectory));
+    } catch (IOException e) {
+      throw new IllegalStateException("Could not initialize Git repository at " + workingDirectory, e);
     }
-    return revision;
   }
 
-  public static void main(String[] args) {
-    System.out.println(new ScmProviderGit().getLocalRevision());
+  @Override
+  public void close() {
+    if (this.git != null) {
+      this.git.close();
+    }
   }
 
+  @Override
+  public String getLocalRevision() {
+    RevCommit revCommit;
+    try {
+      revCommit = this.git.log().call().iterator().next();
+    } catch (GitAPIException e) {
+      throw new IllegalStateException("Could not determine the last revision commit of the local repository.", e);
+    }
+    return revCommit.getName();
+  }
+
+  @Override
   public String getLatestRemoteRevision() {
     // TODO Auto-generated method stub
     return null;
   }
-
 }

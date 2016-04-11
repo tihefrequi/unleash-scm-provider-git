@@ -15,6 +15,7 @@
   <description>The Git SCM provider for the Unleash Maven Plugin.</description>
 
   <properties>
+    <version.java>1.6</version.java>
     <version.jgit>4.3.0.201604071810-r</version.jgit>
     <version.unleash-maven-plugin>0.1.0-SNAPSHOT</version.unleash-maven-plugin>
   </properties>
@@ -31,4 +32,19 @@
       <version>${version.jgit}</version>
     </dependency>
   </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <configuration>
+            <source>${version.java}</source>
+            <target>${version.java}</target>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
 </project>
