@@ -110,8 +110,6 @@ public class ScmProviderGit implements ScmProvider {
 
     // check if local working dir is empty
     if (this.workingDir.exists() && this.workingDir.list().length > 0) {
-      // IDEA maybe also support checkout into non-empty WC. -> create new remote in case of differences and checkout
-      // branch, ...
       throw new ScmException(ScmOperation.CHECKOUT,
           "Unable to checkout remote repository '" + request.getRemoteRepositoryUrl() + "'. Local working directory '"
               + this.workingDir.getAbsolutePath() + "' is not empty!");
@@ -839,9 +837,6 @@ public class ScmProviderGit implements ScmProvider {
       this.log.info(LOG_PREFIX + "Reverting Git commits");
     }
 
-    // String remoteRevision = getLatestRemoteRevision();
-    // TODO check direction (from/to)
-
     if (this.log.isLoggable(Level.FINE)) {
       StringBuilder message = new StringBuilder(LOG_PREFIX).append("Commit info:\n");
       message.append("\t- FROM: ").append(request.getFromRevision()).append('\n');
@@ -854,6 +849,19 @@ public class ScmProviderGit implements ScmProvider {
     UpdateRequest updateRequest = UpdateRequest.builder().mergeStrategy(request.getMergeStrategy())
         .mergeClient(request.getMergeClient().orNull()).build();
     update(updateRequest);
+
+    RevCommit from = this.util.resolveCommit(Optional.of(request.getFromRevision()), Optional.<String> absent());
+    RevCommit to = this.util.resolveCommit(Optional.of(request.getToRevision()), Optional.<String> absent());
+    int diff = from.getCommitTime() - to.getCommitTime();
+    if (diff == 0) {
+      // nothing to revert! return the latest remote version
+      return getLatestRemoteRevision();
+    } else if (diff < 0) {
+      // older from version (wrong direction!
+      throw new ScmException(ScmOperation.REVERT_COMMITS,
+          "Error reverting commits in remote repository. \"FROM\" revision (" + request.getFromRevision()
+              + ") is older than \"TO\" revision (" + request.getToRevision() + ")");
+    }
 
     try {
       RevertCommand revert = this.git.revert();

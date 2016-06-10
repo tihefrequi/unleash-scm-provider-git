@@ -113,7 +113,7 @@ public class GitUtil {
     return false;
   }
 
-  public RevCommit resolveCommit(Optional<String> commitId, Optional<String> branchName) {
+  public RevCommit resolveCommit(Optional<String> commitId, Optional<String> branchName) throws ScmException {
     try {
       LogCommand log = this.git.log();
       if (branchName.isPresent()) {
