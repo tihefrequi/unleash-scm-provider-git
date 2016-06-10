@@ -250,7 +250,13 @@ public class ScmProviderGit implements ScmProvider {
       this.log.info(LOG_PREFIX + "Committing local changes.");
     }
 
-    // FIXME check state prior to committing to avoid empty ones!
+    if (!this.util.isDirty(request.getPathsToCommit())) {
+      if (this.log.isLoggable(Level.INFO)) {
+        this.log.info(LOG_PREFIX + "Nothing to commit here.");
+      }
+      return request.push() ? getLatestRemoteRevision() : getLocalRevision();
+    }
+
     if (this.log.isLoggable(Level.FINE)) {
       StringBuilder message = new StringBuilder(LOG_PREFIX + "Commit info:\n");
       message.append("\t- WORKING_DIR: ").append(this.workingDir.getAbsolutePath()).append('\n');

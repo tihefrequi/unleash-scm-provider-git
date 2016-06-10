@@ -7,6 +7,7 @@ import java.util.Set;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand.ListMode;
 import org.eclipse.jgit.api.LogCommand;
+import org.eclipse.jgit.api.StatusCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
@@ -28,6 +29,18 @@ public class GitUtil {
 
   public GitUtil(Git git) {
     this.git = git;
+  }
+
+  public boolean isDirty(Set<String> paths) throws ScmException {
+    try {
+      StatusCommand status = this.git.status();
+      for (String path : paths) {
+        status.addPath(path);
+      }
+      return !status.call().isClean();
+    } catch (GitAPIException e) {
+      throw new ScmException(ScmOperation.INFO, "Could not evaluate the status of the local repository.", e);
+    }
   }
 
   public String getCurrentConnectionUrl() throws ScmException {
