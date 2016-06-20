@@ -17,7 +17,7 @@
   <properties>
     <version.java>1.6</version.java>
     <version.jgit>4.3.0.201604071810-r</version.jgit>
-    <version.unleash-maven-plugin>0.2.0-SNAPSHOT</version.unleash-maven-plugin>
+    <version.unleash-maven-plugin>0.2.0</version.unleash-maven-plugin>
   </properties>
 
   <dependencies>
