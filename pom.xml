@@ -13,6 +13,29 @@
 
   <name>Unleash SCM Provider Git</name>
   <description>The Git SCM provider for the Unleash Maven Plugin.</description>
+  <url>https://github.com/shillner/unleash-scm-provider-git</url>
+  <inceptionYear>2016</inceptionYear>
+  
+  <developers>
+    <developer>
+      <id>shillner</id>
+      <name>Stanley Hillner</name>
+      <organization>itemis AG</organization>
+      <organizationUrl>https://itemis.com/</organizationUrl>
+      <timezone>1</timezone>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/shillner/unleash-scm-provider-git.git</connection>
+    <url>https://github.com/shillner/unleash-scm-provider-git</url>
+    <tag>HEAD</tag>
+  </scm>
+  
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/shillner/unleash-scm-provider-git/issues</url>
+  </issueManagement>
 
   <properties>
     <version.java>1.6</version.java>
