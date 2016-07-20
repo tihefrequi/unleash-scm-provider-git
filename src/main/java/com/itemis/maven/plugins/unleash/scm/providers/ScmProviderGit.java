@@ -52,6 +52,7 @@ import com.itemis.maven.plugins.unleash.scm.providers.util.GitUtil;
 import com.itemis.maven.plugins.unleash.scm.requests.BranchRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.CheckoutRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest;
+import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest.Builder;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteBranchRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteTagRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.PushRequest;
@@ -270,7 +271,13 @@ public class ScmProviderGit implements ScmProvider {
     // add all changes to be committed (either everything or the specified paths)
     AddCommand add = this.git.add();
     if (request.commitAllChanges()) {
-      add.addFilepattern(".");
+      if (request.includeUntrackedFiles()) {
+        add.addFilepattern(".");
+      } else {
+        for (String path : this.util.getUncommittedChangedPaths()) {
+          add.addFilepattern(path);
+        }
+      }
     } else {
       for (String path : request.getPathsToCommit()) {
         add.addFilepattern(path);
@@ -493,8 +500,11 @@ public class ScmProviderGit implements ScmProvider {
       // 1. commit the changes (no merging because we stay local!)
       String preTagCommitMessage = request.getPreTagCommitMessage()
           .or("Preparation for tag creation (Tag name: '" + request.getTagName() + "').");
-      CommitRequest cr = CommitRequest.builder().message(preTagCommitMessage).build();
-      commit(cr);
+      Builder builder = CommitRequest.builder().message(preTagCommitMessage);
+      if (request.includeUntrackedFiles()) {
+        builder.includeUntrackedFiles();
+      }
+      commit(builder.build());
 
       try {
         // 2. tag local revision

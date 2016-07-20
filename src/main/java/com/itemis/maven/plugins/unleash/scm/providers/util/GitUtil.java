@@ -43,6 +43,15 @@ public class GitUtil {
     }
   }
 
+  public Set<String> getUncommittedChangedPaths() throws ScmException {
+    try {
+      StatusCommand status = this.git.status();
+      return status.call().getUncommittedChanges();
+    } catch (GitAPIException e) {
+      throw new ScmException(ScmOperation.INFO, "Could not evaluate the status of the local repository.", e);
+    }
+  }
+
   public String getCurrentConnectionUrl() throws ScmException {
     String localBranchName = getCurrentBranchName();
     String remoteName = getRemoteName(localBranchName);
