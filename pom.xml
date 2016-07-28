@@ -9,7 +9,7 @@
 
   <groupId>com.itemis.maven.plugins</groupId>
   <artifactId>unleash-scm-provider-git</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2-SNAPSHOT</version>
 
   <name>Unleash SCM Provider Git</name>
   <description>The Git SCM provider for the Unleash Maven Plugin.</description>
@@ -29,7 +29,7 @@
   <scm>
     <connection>scm:git:https://github.com/shillner/unleash-scm-provider-git.git</connection>
     <url>https://github.com/shillner/unleash-scm-provider-git</url>
-    <tag>1.0.1</tag>
+    <tag>HEAD</tag>
   </scm>
   
   <issueManagement>
