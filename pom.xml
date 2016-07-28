@@ -9,7 +9,7 @@
 
   <groupId>com.itemis.maven.plugins</groupId>
   <artifactId>unleash-scm-provider-git</artifactId>
-  <version>1.0.1-SNAPSHOT</version>
+  <version>1.0.1</version>
 
   <name>Unleash SCM Provider Git</name>
   <description>The Git SCM provider for the Unleash Maven Plugin.</description>
@@ -40,7 +40,7 @@
   <properties>
     <version.java>1.6</version.java>
     <version.jgit>4.3.0.201604071810-r</version.jgit>
-    <version.unleash-maven-plugin>1.0.0</version.unleash-maven-plugin>
+    <version.unleash-maven-plugin>1.0.2</version.unleash-maven-plugin>
   </properties>
 
   <dependencies>

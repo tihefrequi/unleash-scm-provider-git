@@ -90,7 +90,6 @@ import org.eclipse.jgit.merge.MergeFormatter;
 import org.eclipse.jgit.merge.MergeResult;
 import org.eclipse.jgit.merge.RecursiveMerger;
 import org.eclipse.jgit.merge.ResolveMerger;
-import org.eclipse.jgit.merge.ThreeWayMerger;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
@@ -112,20 +111,7 @@ import com.itemis.maven.plugins.unleash.scm.providers.ScmProviderGit;
  */
 // TODO re-implement this merger or look at how to extend any existing merger implementation and modify required parts
 // only.
-public class UnleashGitMerger extends ThreeWayMerger {
-  /**
-   * If the merge fails (means: not stopped because of unresolved conflicts)
-   * this enum is used to explain why it failed
-   */
-  public enum MergeFailureReason {
-    /** the merge failed because of a dirty index */
-    DIRTY_INDEX,
-    /** the merge failed because of a dirty workingtree */
-    DIRTY_WORKTREE,
-    /** the merge failed because of a file could not be deleted */
-    COULD_NOT_DELETE
-  }
-
+public class UnleashGitMerger extends ResolveMerger {
   /**
    * The tree walk which we'll iterate over to merge entries.
    *
@@ -362,6 +348,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @throws NoWorkTreeException
    * @since 3.4
    */
+  @Override
   protected void cleanUp() throws NoWorkTreeException, CorruptObjectException, IOException {
     if (this.inCore) {
       this.modifiedFiles.clear();
@@ -466,9 +453,10 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @throws IOException
    * @since 3.5
    */
+  @Override
   protected boolean processEntry(CanonicalTreeParser base, CanonicalTreeParser ours, CanonicalTreeParser theirs,
       DirCacheBuildIterator index, WorkingTreeIterator work, boolean ignoreConflicts)
-          throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
+      throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
     this.enterSubtree = true;
     final int modeO = this.tw.getRawMode(T_OURS);
     final int modeT = this.tw.getRawMode(T_THEIRS);
@@ -893,6 +881,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    *          the names of the commits as they would appear in conflict
    *          markers
    */
+  @Override
   public void setCommitNames(String[] commitNames) {
     this.commitNames = commitNames;
   }
@@ -901,6 +890,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @return the names of the commits as they would appear in conflict
    *         markers.
    */
+  @Override
   public String[] getCommitNames() {
     return this.commitNames;
   }
@@ -909,6 +899,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @return the paths with conflicts. This is a subset of the files listed
    *         by {@link #getModifiedFiles()}
    */
+  @Override
   public List<String> getUnmergedPaths() {
     return this.unmergedPaths;
   }
@@ -919,6 +910,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    *         the merge algorithm decides to take the theirs-version. This is a
    *         superset of the files listed by {@link #getUnmergedPaths()}.
    */
+  @Override
   public List<String> getModifiedFiles() {
     return this.modifiedFiles;
   }
@@ -929,6 +921,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    *         into the index. This means: the merge wrote a new stage 0 entry
    *         for this path.
    */
+  @Override
   public Map<String, DirCacheEntry> getToBeCheckedOut() {
     return this.toBeCheckedOut;
   }
@@ -936,6 +929,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
   /**
    * @return the mergeResults
    */
+  @Override
   public Map<String, MergeResult<? extends Sequence>> getMergeResults() {
     return this.mergeResults;
   }
@@ -945,6 +939,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    *         conflict). <code>null</code> is returned if this merge didn't
    *         fail.
    */
+  @Override
   public Map<String, MergeFailureReason> getFailingPaths() {
     return this.failingPaths.size() == 0 ? null : this.failingPaths;
   }
@@ -956,6 +951,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @return <code>true</code> if a failure occurred, <code>false</code>
    *         otherwise
    */
+  @Override
   public boolean failed() {
     return this.failingPaths.size() > 0;
   }
@@ -973,6 +969,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @param dc
    *          the DirCache to set
    */
+  @Override
   public void setDirCache(DirCache dc) {
     this.dircache = dc;
     this.implicitDirCache = false;
@@ -989,6 +986,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @param workingTreeIterator
    *          the workingTreeIt to set
    */
+  @Override
   public void setWorkingTreeIterator(WorkingTreeIterator workingTreeIterator) {
     this.workingTreeIterator = workingTreeIterator;
   }
@@ -1022,6 +1020,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @throws IOException
    * @since 3.5
    */
+  @Override
   protected boolean mergeTrees(AbstractTreeIterator baseTree, RevTree headTree, RevTree mergeTree,
       boolean ignoreConflicts) throws IOException {
 
@@ -1085,6 +1084,7 @@ public class UnleashGitMerger extends ThreeWayMerger {
    * @throws IOException
    * @since 3.5
    */
+  @Override
   protected boolean mergeTreeWalk(TreeWalk treeWalk, boolean ignoreConflicts) throws IOException {
     boolean hasWorkingTreeIterator = this.tw.getTreeCount() > T_FILE;
     while (treeWalk.next()) {
