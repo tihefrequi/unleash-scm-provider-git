@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -16,6 +17,7 @@ import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode;
 import org.eclipse.jgit.api.DeleteTagCommand;
 import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.LogCommand;
 import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.api.MergeCommand;
 import org.eclipse.jgit.api.MergeCommand.FastForwardMode;
@@ -24,6 +26,7 @@ import org.eclipse.jgit.api.ResetCommand.ResetType;
 import org.eclipse.jgit.api.RevertCommand;
 import org.eclipse.jgit.api.TagCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.PersonIdent;
@@ -40,6 +43,7 @@ import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
@@ -55,10 +59,13 @@ import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest.Builder;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteBranchRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteTagRequest;
+import com.itemis.maven.plugins.unleash.scm.requests.HistoryRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.PushRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.RevertCommitsRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.TagRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.UpdateRequest;
+import com.itemis.maven.plugins.unleash.scm.results.HistoryCommit;
+import com.itemis.maven.plugins.unleash.scm.results.HistoryResult;
 
 @ScmProviderType("git")
 public class ScmProviderGit implements ScmProvider {
@@ -587,9 +594,10 @@ public class ScmProviderGit implements ScmProvider {
     try {
       LsRemoteCommand lsRemote = this.git.lsRemote().setRemote(remoteName)
           .setCredentialsProvider(this.credentialsProvider).setTags(true);
-      Collection<Ref> tags = lsRemote.call();
-      for (Ref tag : tags) {
-        if (Objects.equal(tag.getName(), GitUtil.TAG_NAME_PREFIX + tagName)) {
+
+      String tagRefName = GitUtil.TAG_NAME_PREFIX + tagName;
+      for (Ref tag : lsRemote.call()) {
+        if (Objects.equal(tag.getName(), tagRefName)) {
           return true;
         }
       }
@@ -965,5 +973,87 @@ public class ScmProviderGit implements ScmProvider {
   public boolean isTagInfoIncludedInConnection() {
     // connection string only points to the git dir and branches/tags have to be specified and checked out separately
     return false;
+  }
+
+  @Override
+  // TODO logging!
+  public HistoryResult getHistory(HistoryRequest request) throws ScmException {
+    HistoryResult.Builder historyBuilder = HistoryResult.builder();
+
+    if (request.getRemoteRepositoryUrl().isPresent()) {
+      throw new ScmException(ScmOperation.INFO, "Remote history retrieval is not supported by Git!");
+    }
+
+    try {
+      LogCommand logCommand = this.git.log();
+      if (request.getMessageFilters().isEmpty()) {
+        // set the limit of commits to be retrieved only if no filters are provided since the user wants to see the
+        // specified number of commits but some could be filtered out
+        logCommand.setMaxCount((int) request.getMaxResults());
+      }
+
+      AnyObjectId startId = getTagRevisionOrDefault(request.getStartTag(), request.getStartRevision().orNull());
+      AnyObjectId endId = getTagRevisionOrDefault(request.getEndTag(),
+          request.getEndRevision().or(this.git.getRepository().resolve("HEAD").name()));
+
+      if (startId != null && endId != null) {
+        logCommand.addRange(startId, endId);
+      } else if (startId != null) {
+        logCommand.add(startId);
+      } else if (endId != null) {
+        logCommand.add(endId);
+      }
+
+      Set<String> messageFilterPatterns = request.getMessageFilters();
+      int commitsAdded = 0;
+      for (RevCommit revCommit : logCommand.call()) {
+        if (commitsAdded == request.getMaxResults()) {
+          break;
+        }
+        if (isFilteredMessage(revCommit.getShortMessage(), messageFilterPatterns)) {
+          continue;
+        }
+
+        HistoryCommit.Builder b = HistoryCommit.builder();
+        b.setRevision(revCommit.getId().name());
+        b.setMessage(revCommit.getShortMessage());
+        PersonIdent authorIdent = revCommit.getAuthorIdent();
+        b.setAuthor(authorIdent.getName());
+        b.setDate(authorIdent.getWhen());
+        historyBuilder.addCommit(b.build());
+        commitsAdded++;
+      }
+    } catch (Exception e) {
+      throw new ScmException(ScmOperation.INFO, "Unable to retrieve the Git log history.", e);
+    }
+
+    return historyBuilder.build();
+  }
+
+  private boolean isFilteredMessage(String message, Set<String> messageFilterPatterns) {
+    for (String filter : messageFilterPatterns) {
+      if (message.matches(filter)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private AnyObjectId getTagRevisionOrDefault(Optional<String> tag, String defaultRevision) {
+    if (tag.isPresent()) {
+      try {
+        String tagName = GitUtil.TAG_NAME_PREFIX + tag.get();
+        for (Ref ref : this.git.tagList().call()) {
+          if (Objects.equal(tagName, ref.getName())) {
+            Ref peeledRef = this.git.getRepository().peel(ref);
+            return MoreObjects.firstNonNull(peeledRef.getPeeledObjectId(), peeledRef.getObjectId());
+          }
+        }
+        throw new ScmException(ScmOperation.INFO, "Could not find a tag with name " + tag.get());
+      } catch (Exception e) {
+        throw new ScmException(ScmOperation.INFO, "Unable to get the revision of the following tag: " + tag.get(), e);
+      }
+    }
+    return defaultRevision != null ? ObjectId.fromString(defaultRevision) : null;
   }
 }
