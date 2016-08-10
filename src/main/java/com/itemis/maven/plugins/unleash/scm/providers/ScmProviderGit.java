@@ -485,7 +485,7 @@ public class ScmProviderGit implements ScmProvider {
   @Override
   public String tag(TagRequest request) throws ScmException {
     if (this.log.isLoggable(Level.INFO)) {
-      this.log.info(LOG_PREFIX + "Tagging local repository.");
+      this.log.info(LOG_PREFIX + "Tagging local repository with '" + request.getTagName() + "'");
     }
 
     if (this.log.isLoggable(Level.FINE)) {
@@ -575,7 +575,7 @@ public class ScmProviderGit implements ScmProvider {
   @Override
   public boolean hasTag(String tagName) throws ScmException {
     if (this.log.isLoggable(Level.INFO)) {
-      this.log.info(LOG_PREFIX + "Searching for Git tag");
+      this.log.info(LOG_PREFIX + "Searching for Git tag '" + tagName + "'");
     }
 
     String localBranchName = this.util.getCurrentBranchName();
