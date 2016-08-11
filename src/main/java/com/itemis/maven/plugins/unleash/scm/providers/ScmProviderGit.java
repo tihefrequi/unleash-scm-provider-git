@@ -1,5 +1,6 @@
 package com.itemis.maven.plugins.unleash.scm.providers;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
@@ -26,6 +27,8 @@ import org.eclipse.jgit.api.ResetCommand.ResetType;
 import org.eclipse.jgit.api.RevertCommand;
 import org.eclipse.jgit.api.TagCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
@@ -47,6 +50,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
+import com.google.common.io.Closeables;
 import com.itemis.maven.plugins.unleash.scm.ScmException;
 import com.itemis.maven.plugins.unleash.scm.ScmOperation;
 import com.itemis.maven.plugins.unleash.scm.ScmProvider;
@@ -59,11 +63,15 @@ import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.CommitRequest.Builder;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteBranchRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.DeleteTagRequest;
+import com.itemis.maven.plugins.unleash.scm.requests.DiffRequest;
+import com.itemis.maven.plugins.unleash.scm.requests.DiffRequest.DiffType;
 import com.itemis.maven.plugins.unleash.scm.requests.HistoryRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.PushRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.RevertCommitsRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.TagRequest;
 import com.itemis.maven.plugins.unleash.scm.requests.UpdateRequest;
+import com.itemis.maven.plugins.unleash.scm.results.DiffObject;
+import com.itemis.maven.plugins.unleash.scm.results.DiffResult;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryCommit;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryResult;
 
@@ -1055,5 +1063,88 @@ public class ScmProviderGit implements ScmProvider {
       }
     }
     return defaultRevision != null ? ObjectId.fromString(defaultRevision) : null;
+  }
+
+  @Override
+  public DiffResult getDiff(DiffRequest request) throws ScmException {
+    if (request.getSourceRemoteRepositoryUrl().isPresent() || request.getTargetRemoteRepositoryUrl().isPresent()) {
+      throw new ScmException(ScmOperation.DIFF,
+          "Diff creation has been requested from remote repositories. This feature is currently not supported by the Git SCM provider.");
+    }
+
+    String sourceRevision = request.getSourceRevision().or("HEAD");
+    ObjectId sourceId = null;
+    try {
+      sourceId = this.git.getRepository().resolve(sourceRevision);
+    } catch (Exception e) {
+      throw new ScmException(ScmOperation.DIFF,
+          "Unable to resolve source object id using the current repository: " + sourceRevision, e);
+    }
+
+    String targetRevision = request.getTargetRevision().or("HEAD");
+    ObjectId targetId = null;
+    try {
+      targetId = this.git.getRepository().resolve(targetRevision);
+    } catch (Exception e) {
+      throw new ScmException(ScmOperation.DIFF,
+          "Unable to resolve target object id using the current repository: " + sourceRevision, e);
+    }
+
+    DiffResult.Builder resultBuilder = DiffResult.builder();
+
+    ByteArrayOutputStream os = new ByteArrayOutputStream();
+    DiffFormatter df = new DiffFormatter(os);
+    df.setRepository(this.git.getRepository());
+    try {
+      List<DiffEntry> entries = df.scan(sourceId, targetId);
+      for (DiffEntry entry : entries) {
+        DiffObject.Builder b = DiffObject.builder();
+        switch (entry.getChangeType()) {
+          case ADD:
+            b.addition(entry.getNewPath());
+            break;
+          case DELETE:
+            b.deletion(entry.getOldPath());
+            break;
+          case MODIFY:
+            b.changed(entry.getOldPath());
+            if (request.getType() == DiffType.CHANGES_ONLY) {
+              df.format(entry);
+              df.flush();
+              String textualDiff = new String(os.toByteArray());
+              b.addTextualDiff(textualDiff);
+              os.reset();
+            }
+            break;
+          case RENAME:
+            b.moved(entry.getOldPath(), entry.getNewPath());
+            break;
+          case COPY:
+            b.copied(entry.getOldPath(), entry.getNewPath());
+            break;
+        }
+
+        if (request.getType() == DiffType.FULL) {
+          df.format(entry);
+          df.flush();
+          String textualDiff = new String(os.toByteArray());
+          b.addTextualDiff(textualDiff);
+          os.reset();
+        }
+
+        resultBuilder.addDiff(b.build());
+      }
+    } catch (Exception e) {
+      throw new ScmException(ScmOperation.DIFF, "Unable to calculate diff.", e);
+    } finally {
+      df.close();
+      try {
+        Closeables.close(os, true);
+      } catch (IOException e) {
+        // should never happen ;)
+      }
+    }
+
+    return resultBuilder.build();
   }
 }
