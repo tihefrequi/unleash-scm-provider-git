@@ -26,6 +26,8 @@ import org.eclipse.jgit.api.PushCommand;
 import org.eclipse.jgit.api.ResetCommand.ResetType;
 import org.eclipse.jgit.api.RevertCommand;
 import org.eclipse.jgit.api.TagCommand;
+import org.eclipse.jgit.api.TransportCommand;
+import org.eclipse.jgit.api.TransportConfigCallback;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
@@ -39,11 +41,17 @@ import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.transport.CredentialsProvider;
+import org.eclipse.jgit.transport.JschConfigSessionFactory;
+import org.eclipse.jgit.transport.OpenSshConfig.Host;
 import org.eclipse.jgit.transport.PushResult;
 import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.eclipse.jgit.transport.RemoteRefUpdate.Status;
+import org.eclipse.jgit.transport.SshSessionFactory;
+import org.eclipse.jgit.transport.SshTransport;
 import org.eclipse.jgit.transport.TagOpt;
+import org.eclipse.jgit.transport.Transport;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.eclipse.jgit.util.FS;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
@@ -54,6 +62,7 @@ import com.google.common.io.Closeables;
 import com.itemis.maven.plugins.unleash.scm.ScmException;
 import com.itemis.maven.plugins.unleash.scm.ScmOperation;
 import com.itemis.maven.plugins.unleash.scm.ScmProvider;
+import com.itemis.maven.plugins.unleash.scm.ScmProviderInitialization;
 import com.itemis.maven.plugins.unleash.scm.annotations.ScmProviderType;
 import com.itemis.maven.plugins.unleash.scm.providers.merge.UnleashGitFullMergeStrategy;
 import com.itemis.maven.plugins.unleash.scm.providers.util.GitUtil;
@@ -74,6 +83,9 @@ import com.itemis.maven.plugins.unleash.scm.results.DiffObject;
 import com.itemis.maven.plugins.unleash.scm.results.DiffResult;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryCommit;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryResult;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
 
 @ScmProviderType("git")
 public class ScmProviderGit implements ScmProvider {
@@ -83,18 +95,18 @@ public class ScmProviderGit implements ScmProvider {
   private Git git;
   private PersonIdent personIdent;
   private CredentialsProvider credentialsProvider;
+  private SshSessionFactory sshSessionFactory;
   private File workingDir;
   private List<String> additionalThingsToPush;
   private GitUtil util;
 
   @Override
-  public void initialize(File workingDirectory, Optional<Logger> logger, Optional<String> username,
-      Optional<String> password) {
-    this.log = logger.or(Logger.getLogger(ScmProvider.class.getName()));
-    this.workingDir = workingDirectory;
+  public void initialize(final ScmProviderInitialization initialization) {
+    this.log = initialization.getLogger().or(Logger.getLogger(ScmProvider.class.getName()));
+    this.workingDir = initialization.getWorkingDirectory();
     this.additionalThingsToPush = Lists.newArrayList();
 
-    if (workingDirectory.exists() && workingDirectory.isDirectory() && workingDirectory.list().length > 0) {
+    if (this.workingDir.exists() && this.workingDir.isDirectory() && this.workingDir.list().length > 0) {
       try {
         FileRepositoryBuilder builder = new FileRepositoryBuilder();
         Repository repo = builder.findGitDir(this.workingDir).build();
@@ -106,9 +118,33 @@ public class ScmProviderGit implements ScmProvider {
       }
     }
 
-    if (username.isPresent()) {
-      this.credentialsProvider = new UsernamePasswordCredentialsProvider(username.get(), password.or(""));
+    if (initialization.getUsername().isPresent()) {
+      this.credentialsProvider = new UsernamePasswordCredentialsProvider(initialization.getUsername().get(),
+          initialization.getPassword().or(""));
     }
+
+    this.sshSessionFactory = new JschConfigSessionFactory() {
+      @Override
+      protected void configure(Host hc, Session session) {
+      }
+
+      @Override
+      protected JSch createDefaultJSch(FS fs) throws JSchException {
+        JSch defaultJSch = super.createDefaultJSch(fs);
+
+        // IDEA Maybe an SSH agent connector could be useful here to avoid passphrases in many
+        // cases: https://gist.github.com/quidryan/5449155
+
+        if (initialization.getSshPrivateKeyPassphrase().isPresent()) {
+          String passphrase = initialization.getSshPrivateKeyPassphrase().get();
+          for (Object itentityName : defaultJSch.getIdentityNames()) {
+            defaultJSch.addIdentity(itentityName.toString(), passphrase);
+          }
+        }
+
+        return defaultJSch;
+      }
+    };
   }
 
   @Override
@@ -140,8 +176,8 @@ public class ScmProviderGit implements ScmProvider {
         this.log.fine(message.toString());
       }
 
-      CloneCommand clone = Git.cloneRepository().setDirectory(this.workingDir).setURI(request.getRemoteRepositoryUrl())
-          .setCredentialsProvider(this.credentialsProvider);
+      CloneCommand clone = Git.cloneRepository().setDirectory(this.workingDir).setURI(request.getRemoteRepositoryUrl());
+      setAuthenticationDetails(clone);
       if (!request.checkoutWholeRepository()) {
         clone.setNoCheckout(true);
       }
@@ -365,8 +401,8 @@ public class ScmProviderGit implements ScmProvider {
 
     try {
       // 2. push local changes to remote repository
-      PushCommand push = this.git.push().setRemote(remoteName).setCredentialsProvider(this.credentialsProvider)
-          .setAtomic(true).setPushAll().setPushTags();
+      PushCommand push = this.git.push().setRemote(remoteName).setAtomic(true).setPushAll().setPushTags();
+      setAuthenticationDetails(push);
       for (String additional : this.additionalThingsToPush) {
         push.add(additional);
       }
@@ -428,8 +464,9 @@ public class ScmProviderGit implements ScmProvider {
     }
 
     try {
-      FetchCommand fetch = this.git.fetch().setRemote(remoteName).setCredentialsProvider(this.credentialsProvider)
-          .setTagOpt(TagOpt.AUTO_FOLLOW).setRemoveDeletedRefs(true);
+      FetchCommand fetch = this.git.fetch().setRemote(remoteName).setTagOpt(TagOpt.AUTO_FOLLOW)
+          .setRemoveDeletedRefs(true);
+      setAuthenticationDetails(fetch);
       fetch.call();
     } catch (GitAPIException e) {
       throw new ScmException(ScmOperation.UPDATE,
@@ -554,8 +591,8 @@ public class ScmProviderGit implements ScmProvider {
           String remoteName = this.util.getRemoteName(localBranchName);
           String connectionUrl = this.util.getConnectionUrlOfRemote(remoteName);
           try {
-            PushCommand push = this.git.push().setRemote(remoteName).setCredentialsProvider(this.credentialsProvider)
-                .add(tagPushName);
+            PushCommand push = this.git.push().setRemote(remoteName).add(tagPushName);
+            setAuthenticationDetails(push);
             push.call();
             newRevision = getLatestRemoteRevision();
           } catch (GitAPIException e) {
@@ -600,8 +637,8 @@ public class ScmProviderGit implements ScmProvider {
     }
 
     try {
-      LsRemoteCommand lsRemote = this.git.lsRemote().setRemote(remoteName)
-          .setCredentialsProvider(this.credentialsProvider).setTags(true);
+      LsRemoteCommand lsRemote = this.git.lsRemote().setRemote(remoteName).setTags(true);
+      setAuthenticationDetails(lsRemote);
 
       String tagRefName = GitUtil.TAG_NAME_PREFIX + tagName;
       for (Ref tag : lsRemote.call()) {
@@ -633,8 +670,9 @@ public class ScmProviderGit implements ScmProvider {
         this.log.fine(LOG_PREFIX + "Fetching remote tag");
       }
       try {
-        this.git.fetch().setRemote(remoteName).setTagOpt(TagOpt.FETCH_TAGS)
-            .setCredentialsProvider(this.credentialsProvider).call();
+        FetchCommand fetch = this.git.fetch().setRemote(remoteName).setTagOpt(TagOpt.FETCH_TAGS);
+        setAuthenticationDetails(fetch);
+        fetch.call();
       } catch (GitAPIException e) {
         throw new ScmException(ScmOperation.DELETE_TAG, "Unable to fetch tags for deletion of tag '"
             + request.getTagName() + "' from remote '" + remoteName + "[" + remoteUrl + "]'.", e);
@@ -666,8 +704,8 @@ public class ScmProviderGit implements ScmProvider {
         if (hasRemoteTag) {
           String tagPushName = ":" + GitUtil.TAG_NAME_PREFIX + request.getTagName();
           if (request.push()) {
-            PushCommand push = this.git.push().setRemote(remoteName).setCredentialsProvider(this.credentialsProvider)
-                .add(tagPushName);
+            PushCommand push = this.git.push().setRemote(remoteName).add(tagPushName);
+            setAuthenticationDetails(push);
             push.call();
           } else {
             this.additionalThingsToPush.add(tagPushName);
@@ -755,8 +793,8 @@ public class ScmProviderGit implements ScmProvider {
           String remoteName = this.util.getRemoteName(localBranchName);
           String connectionUrl = this.util.getConnectionUrlOfRemote(remoteName);
           try {
-            PushCommand push = this.git.push().setRemote(remoteName).setCredentialsProvider(this.credentialsProvider)
-                .add(branchPushName);
+            PushCommand push = this.git.push().setRemote(remoteName).add(branchPushName);
+            setAuthenticationDetails(push);
             push.call();
             newRevision = getLatestRemoteRevision();
           } catch (GitAPIException e) {
@@ -799,8 +837,8 @@ public class ScmProviderGit implements ScmProvider {
     }
 
     try {
-      LsRemoteCommand lsRemote = this.git.lsRemote().setRemote(remoteName)
-          .setCredentialsProvider(this.credentialsProvider).setHeads(true);
+      LsRemoteCommand lsRemote = this.git.lsRemote().setRemote(remoteName).setHeads(true);
+      setAuthenticationDetails(lsRemote);
       Collection<Ref> branches = lsRemote.call();
       for (Ref branch : branches) {
         if (Objects.equal(branch.getName(), GitUtil.HEADS_NAME_PREFIX + branchName)) {
@@ -844,8 +882,10 @@ public class ScmProviderGit implements ScmProvider {
     if (hasBranch(request.getBranchName())) {
       if (request.push()) {
         try {
-          this.git.push().setCredentialsProvider(this.credentialsProvider).setRemote(remoteName)
-              .add(":" + GitUtil.HEADS_NAME_PREFIX + request.getBranchName()).call();
+          PushCommand push = this.git.push().setRemote(remoteName)
+              .add(":" + GitUtil.HEADS_NAME_PREFIX + request.getBranchName());
+          setAuthenticationDetails(push);
+          push.call();
         } catch (GitAPIException e) {
           e.printStackTrace();
         }
@@ -952,8 +992,9 @@ public class ScmProviderGit implements ScmProvider {
       String localBranchName = this.util.getCurrentBranchName();
       String remoteName = this.util.getRemoteBranchName(localBranchName);
 
-      Collection<Ref> branches = this.git.lsRemote().setCredentialsProvider(this.credentialsProvider).setHeads(true)
-          .call();
+      LsRemoteCommand lsRemote = this.git.lsRemote().setHeads(true);
+      setAuthenticationDetails(lsRemote);
+      Collection<Ref> branches = lsRemote.call();
       for (Ref branch : branches) {
         if (Objects.equal(branch.getTarget().getName(), remoteName)) {
           return branch.getObjectId().getName();
@@ -1146,5 +1187,22 @@ public class ScmProviderGit implements ScmProvider {
     }
 
     return resultBuilder.build();
+  }
+
+  private void setAuthenticationDetails(TransportCommand<?, ?> command) {
+    command.setCredentialsProvider(this.credentialsProvider);
+    command.setTransportConfigCallback(new TransportConfigCallback() {
+      @Override
+      public void configure(Transport transport) {
+        if (isSshTransport(transport)) {
+          SshTransport sshTransport = (SshTransport) transport;
+          sshTransport.setSshSessionFactory(ScmProviderGit.this.sshSessionFactory);
+        }
+      }
+
+      private boolean isSshTransport(Transport transport) {
+        return transport instanceof SshTransport;
+      }
+    });
   }
 }
