@@ -41,8 +41,6 @@ import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.transport.CredentialsProvider;
-import org.eclipse.jgit.transport.JschConfigSessionFactory;
-import org.eclipse.jgit.transport.OpenSshConfig.Host;
 import org.eclipse.jgit.transport.PushResult;
 import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.eclipse.jgit.transport.RemoteRefUpdate.Status;
@@ -51,7 +49,6 @@ import org.eclipse.jgit.transport.SshTransport;
 import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.Transport;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
-import org.eclipse.jgit.util.FS;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
@@ -83,9 +80,6 @@ import com.itemis.maven.plugins.unleash.scm.results.DiffObject;
 import com.itemis.maven.plugins.unleash.scm.results.DiffResult;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryCommit;
 import com.itemis.maven.plugins.unleash.scm.results.HistoryResult;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
 
 @ScmProviderType("git")
 public class ScmProviderGit implements ScmProvider {
@@ -123,28 +117,7 @@ public class ScmProviderGit implements ScmProvider {
           initialization.getPassword().or(""));
     }
 
-    this.sshSessionFactory = new JschConfigSessionFactory() {
-      @Override
-      protected void configure(Host hc, Session session) {
-      }
-
-      @Override
-      protected JSch createDefaultJSch(FS fs) throws JSchException {
-        JSch defaultJSch = super.createDefaultJSch(fs);
-
-        // IDEA Maybe an SSH agent connector could be useful here to avoid passphrases in many
-        // cases: https://gist.github.com/quidryan/5449155
-
-        if (initialization.getSshPrivateKeyPassphrase().isPresent()) {
-          String passphrase = initialization.getSshPrivateKeyPassphrase().get();
-          for (Object itentityName : defaultJSch.getIdentityNames()) {
-            defaultJSch.addIdentity(itentityName.toString(), passphrase);
-          }
-        }
-
-        return defaultJSch;
-      }
-    };
+    this.sshSessionFactory = new GitSshSessionFactory(initialization, log);
   }
 
   @Override
