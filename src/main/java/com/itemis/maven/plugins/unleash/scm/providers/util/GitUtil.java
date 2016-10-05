@@ -13,10 +13,12 @@ import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.transport.RemoteConfig;
+import org.eclipse.jgit.transport.URIish;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Optional;
-import com.google.common.collect.Iterables;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.itemis.maven.plugins.unleash.scm.ScmException;
 import com.itemis.maven.plugins.unleash.scm.ScmOperation;
@@ -72,22 +74,50 @@ public class GitUtil {
   }
 
   public String getRemoteBranchName(String localBranch) {
-    return this.git.getRepository().getConfig().getString("branch", localBranch, "merge");
+    String remoteBranchName = this.git.getRepository().getConfig().getString("branch", localBranch, "merge");
+    if (Strings.isNullOrEmpty(remoteBranchName)) {
+      remoteBranchName = "refs/heads/" + localBranch;
+    }
+    return remoteBranchName;
   }
 
   public String getRemoteName(String localBranch) {
     String remote = this.git.getRepository().getConfig().getString("branch", localBranch, "remote");
-    if (remote == null) {
-      // this can be the case if we are in detached head state
-      Set<String> remotes = this.git.getRepository().getRemoteNames();
-      remote = Iterables.getFirst(remotes, null);
+    if (Strings.isNullOrEmpty(remote)) {
+      // this can be the case if we are in detached head state or if the local git config does not contain a section for
+      // the local branch which determines the remote tracking branch, ...
+      try {
+        List<RemoteConfig> remotes = this.git.remoteList().call();
+        // TODO is there a better way to determine the name of the remote? -> maybe look into the remote and search for
+        // the branch name, ...
+        if (remotes.size() > 0) {
+          remote = remotes.get(0).getName();
+        }
+      } catch (GitAPIException e) {
+        throw new ScmException(ScmOperation.INFO,
+            "Unable to retrieve a list of remotes of the current local repository.", e);
+      }
     }
     return remote;
   }
 
   public String getConnectionUrlOfRemote(String remoteName) {
-    if (remoteName != null) {
-      return this.git.getRepository().getConfig().getString("remote", remoteName, "url");
+    if (!Strings.isNullOrEmpty(remoteName)) {
+      try {
+        List<RemoteConfig> remotes = this.git.remoteList().call();
+        for (RemoteConfig remoteConfig : remotes) {
+          if (Objects.equal(remoteName, remoteConfig.getName())) {
+            List<URIish> uris = remoteConfig.getURIs();
+            if (uris.size() > 0) {
+              return uris.get(0).toString();
+            }
+            return null;
+          }
+        }
+      } catch (GitAPIException e) {
+        throw new ScmException(ScmOperation.INFO,
+            "Unable to retrieve a list of remotes of the current local repository.", e);
+      }
     }
     return null;
   }

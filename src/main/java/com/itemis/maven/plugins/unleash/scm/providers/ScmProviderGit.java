@@ -117,7 +117,7 @@ public class ScmProviderGit implements ScmProvider {
           initialization.getPassword().or(""));
     }
 
-    this.sshSessionFactory = new GitSshSessionFactory(initialization, log);
+    this.sshSessionFactory = new GitSshSessionFactory(initialization, this.log);
   }
 
   @Override
@@ -963,13 +963,14 @@ public class ScmProviderGit implements ScmProvider {
   public String getLatestRemoteRevision() {
     try {
       String localBranchName = this.util.getCurrentBranchName();
-      String remoteName = this.util.getRemoteBranchName(localBranchName);
+      String remoteName = this.util.getRemoteName(localBranchName);
+      String remoteNameBranch = this.util.getRemoteBranchName(localBranchName);
 
-      LsRemoteCommand lsRemote = this.git.lsRemote().setHeads(true);
+      LsRemoteCommand lsRemote = this.git.lsRemote().setHeads(true).setRemote(remoteName);
       setAuthenticationDetails(lsRemote);
       Collection<Ref> branches = lsRemote.call();
       for (Ref branch : branches) {
-        if (Objects.equal(branch.getTarget().getName(), remoteName)) {
+        if (Objects.equal(branch.getTarget().getName(), remoteNameBranch)) {
           return branch.getObjectId().getName();
         }
       }
