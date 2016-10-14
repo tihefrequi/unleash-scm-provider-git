@@ -374,7 +374,7 @@ public class ScmProviderGit implements ScmProvider {
 
     try {
       // 2. push local changes to remote repository
-      PushCommand push = this.git.push().setRemote(remoteName).setAtomic(true).setPushAll().setPushTags();
+      PushCommand push = this.git.push().setRemote(remoteName).setPushAll().setPushTags();
       setAuthenticationDetails(push);
       for (String additional : this.additionalThingsToPush) {
         push.add(additional);
