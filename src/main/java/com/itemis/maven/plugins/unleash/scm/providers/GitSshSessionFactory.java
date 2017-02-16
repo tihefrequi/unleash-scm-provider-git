@@ -1,5 +1,6 @@
 package com.itemis.maven.plugins.unleash.scm.providers;
 
+import java.util.List;
 import java.util.logging.Logger;
 
 import org.eclipse.jgit.transport.JschConfigSessionFactory;
@@ -7,6 +8,7 @@ import org.eclipse.jgit.transport.OpenSshConfig.Host;
 import org.eclipse.jgit.util.FS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import com.itemis.maven.plugins.unleash.scm.ScmProviderInitialization;
 import com.jcraft.jsch.IdentityRepository;
 import com.jcraft.jsch.JSch;
@@ -40,7 +42,7 @@ class GitSshSessionFactory extends JschConfigSessionFactory {
 
   @Override
   protected JSch createDefaultJSch(FS fs) throws JSchException {
-    JSch defaultJSch = super.createDefaultJSch(fs);
+    JSch jsch = super.createDefaultJSch(fs);
 
     /*
      * it appears that jsch can only work with a single 'IdentityRepository', so we default to
@@ -48,8 +50,12 @@ class GitSshSessionFactory extends JschConfigSessionFactory {
      */
     if (this.initialization.getSshPrivateKeyPassphrase().isPresent()) {
       String passphrase = this.initialization.getSshPrivateKeyPassphrase().get();
-      for (Object itentityName : defaultJSch.getIdentityNames()) {
-        defaultJSch.addIdentity(itentityName.toString(), passphrase);
+      @SuppressWarnings("unchecked")
+      List<String> identityNames = Lists.newArrayList(jsch.getIdentityNames());
+
+      jsch.removeAllIdentity();
+      for (String name : identityNames) {
+        jsch.addIdentity(name, passphrase);
       }
     } else {
       Connector sshAgentConnector = getAgentConnector();
@@ -57,16 +63,16 @@ class GitSshSessionFactory extends JschConfigSessionFactory {
         JSch.setConfig(PREFERRED_AUTHENTICATIONS, PUBLIC_KEY);
 
         IdentityRepository identityRepository = new RemoteIdentityRepository(sshAgentConnector);
-        defaultJSch.setIdentityRepository(identityRepository);
+        jsch.setIdentityRepository(identityRepository);
       }
     }
 
-    return defaultJSch;
+    return jsch;
   }
 
   @VisibleForTesting
   boolean isConnectorAvailable() {
-    return OS.indexOf("win") >= 0 ? PageantConnector.isConnectorAvailable() : SSHAgentConnector.isConnectorAvailable();
+    return PageantConnector.isConnectorAvailable() || SSHAgentConnector.isConnectorAvailable();
   }
 
   private Connector getAgentConnector() {
