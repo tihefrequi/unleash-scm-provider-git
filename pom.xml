@@ -44,7 +44,7 @@
     <version.junit>4.12</version.junit>
     <version.mockito-all>1.10.19</version.mockito-all>
     <version.slf4j>1.7.2</version.slf4j>
-    <version.unleash-scm-provider-api>2.0.0</version.unleash-scm-provider-api>
+    <version.unleash-scm-provider-api>2.5.1-SNAPSHOT</version.unleash-scm-provider-api>
   </properties>
 
   <dependencies>

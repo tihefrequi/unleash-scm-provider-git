@@ -116,7 +116,6 @@ public class ScmProviderGit implements ScmProvider {
       this.credentialsProvider = new UsernamePasswordCredentialsProvider(initialization.getUsername().get(),
           initialization.getPassword().or(""));
     }
-
     this.sshSessionFactory = new GitSshSessionFactory(initialization, this.log);
   }
 
