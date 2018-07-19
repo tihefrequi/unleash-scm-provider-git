@@ -125,6 +125,24 @@ public class ScmProviderGit implements ScmProvider {
       this.git.close();
     }
   }
+  
+  public void testConnection(String repositoryUrl) throws ScmException {
+    if (this.log.isLoggable(Level.INFO)) {
+      this.log.info(ScmProviderGit.LOG_PREFIX + "Testing repository connection (URL: " + repositoryUrl + ").");
+    }
+
+    try {
+      LsRemoteCommand lsRemote = Git.lsRemoteRepository().setHeads(true).setRemote(repositoryUrl);
+      setAuthenticationDetails(lsRemote);
+
+      Collection<Ref> result = lsRemote.call();
+      if (result.isEmpty()) {
+        throw new ScmException(ScmOperation.INFO, "No connection could be established to repository: " + repositoryUrl);
+      }
+    } catch (GitAPIException e) {
+      throw new ScmException(ScmOperation.INFO, "No connection could be established to repository: " + repositoryUrl, e);
+    }
+  }
 
   @Override
   public void checkout(CheckoutRequest request) throws ScmException {
