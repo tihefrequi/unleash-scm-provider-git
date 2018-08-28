@@ -125,7 +125,7 @@ public class ScmProviderGit implements ScmProvider {
       this.git.close();
     }
   }
-  
+
   public void testConnection(String repositoryUrl) throws ScmException {
     if (this.log.isLoggable(Level.INFO)) {
       this.log.info(ScmProviderGit.LOG_PREFIX + "Testing repository connection (URL: " + repositoryUrl + ").");
@@ -140,7 +140,8 @@ public class ScmProviderGit implements ScmProvider {
         throw new ScmException(ScmOperation.INFO, "No connection could be established to repository: " + repositoryUrl);
       }
     } catch (GitAPIException e) {
-      throw new ScmException(ScmOperation.INFO, "No connection could be established to repository: " + repositoryUrl, e);
+      throw new ScmException(ScmOperation.INFO, "No connection could be established to repository: " + repositoryUrl,
+          e);
     }
   }
 
@@ -745,7 +746,8 @@ public class ScmProviderGit implements ScmProvider {
       // 1. commit the changes if branching from WC is requested(no merging!)
       if (!request.getRevision().isPresent()) {
         String preBranchCommitMessage = request.getPreBranchCommitMessage() != null
-            ? request.getPreBranchCommitMessage() : request.getMessage();
+            ? request.getPreBranchCommitMessage()
+            : request.getMessage();
         CommitRequest cr = CommitRequest.builder().message(preBranchCommitMessage).noMerge().build();
         commit(cr);
       }
@@ -1085,7 +1087,7 @@ public class ScmProviderGit implements ScmProvider {
         String tagName = GitUtil.TAG_NAME_PREFIX + tag.get();
         for (Ref ref : this.git.tagList().call()) {
           if (Objects.equal(tagName, ref.getName())) {
-            Ref peeledRef = this.git.getRepository().peel(ref);
+            Ref peeledRef = this.git.getRepository().getRefDatabase().peel(ref);
             return MoreObjects.firstNonNull(peeledRef.getPeeledObjectId(), peeledRef.getObjectId());
           }
         }

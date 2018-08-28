@@ -6,7 +6,6 @@ import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.KeyPair;
 
 public class InMemoryIdentity implements Identity {
-  private JSch jsch;
   private KeyPair keyPair;
   private String identity;
 
@@ -16,7 +15,6 @@ public class InMemoryIdentity implements Identity {
   }
 
   private InMemoryIdentity(JSch jsch, String name, KeyPair keyPair) throws JSchException {
-    this.jsch = jsch;
     this.identity = name;
     this.keyPair = keyPair;
   }

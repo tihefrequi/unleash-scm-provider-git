@@ -1,5 +1,7 @@
 package com.itemis.maven.plugins.unleash.scm.providers.merge;
 
+import org.eclipse.jgit.lib.Config;
+import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.Merger;
@@ -27,5 +29,10 @@ public class UnleashGitFullMergeStrategy extends MergeStrategy {
   @Override
   public Merger newMerger(Repository db, boolean inCore) {
     return new UnleashGitMerger(db, inCore, this.mergeClient);
+  }
+
+  @Override
+  public Merger newMerger(ObjectInserter inserter, Config config) {
+    throw new UnsupportedOperationException();
   }
 }

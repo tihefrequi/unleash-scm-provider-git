@@ -65,6 +65,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.jgit.attributes.Attributes;
 import org.eclipse.jgit.diff.DiffAlgorithm;
 import org.eclipse.jgit.diff.DiffAlgorithm.SupportedAlgorithm;
 import org.eclipse.jgit.diff.RawText;
@@ -82,7 +83,6 @@ import org.eclipse.jgit.errors.NoWorkTreeException;
 import org.eclipse.jgit.lib.ConfigConstants;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.merge.MergeAlgorithm;
 import org.eclipse.jgit.merge.MergeChunk.ConflictState;
@@ -395,7 +395,7 @@ public class UnleashGitMerger extends ResolveMerger {
    * DirCacheEntry
    *
    * @param e
-   *          the entry which should be copied
+   *            the entry which should be copied
    *
    * @return the entry which was added to the index
    */
@@ -410,9 +410,10 @@ public class UnleashGitMerger extends ResolveMerger {
   }
 
   /**
-   * Processes one path and tries to merge. This method will do all do all
-   * trivial (not content) merges and will also detect if a merge will fail.
-   * The merge will fail when one of the following is true
+   * Processes one path and tries to merge taking git attributes in account.
+   * This method will do all trivial (not content) merges and will also detect
+   * if a merge will fail. The merge will fail when one of the following is
+   * true
    * <ul>
    * <li>the index entry does not match the entry in ours. When merging one
    * branch into the current HEAD, ours will point to HEAD and theirs will
@@ -429,33 +430,35 @@ public class UnleashGitMerger extends ResolveMerger {
    * </ul>
    *
    * @param base
-   *          the common base for ours and theirs
+   *                          the common base for ours and theirs
    * @param ours
-   *          the ours side of the merge. When merging a branch into the
-   *          HEAD ours will point to HEAD
+   *                          the ours side of the merge. When merging a branch into the
+   *                          HEAD ours will point to HEAD
    * @param theirs
-   *          the theirs side of the merge. When merging a branch into the
-   *          current HEAD theirs will point to the branch which is merged
-   *          into HEAD.
+   *                          the theirs side of the merge. When merging a branch into the
+   *                          current HEAD theirs will point to the branch which is merged
+   *                          into HEAD.
    * @param index
-   *          the index entry
+   *                          the index entry
    * @param work
-   *          the file in the working tree
+   *                          the file in the working tree
    * @param ignoreConflicts
-   *          see
-   *          {@link UnleashGitMerger#mergeTrees(AbstractTreeIterator, RevTree, RevTree, boolean)}
+   *                          see
+   *                          {@link org.eclipse.jgit.merge.ResolveMerger#mergeTrees(AbstractTreeIterator, RevTree, RevTree, boolean)}
+   * @param attributes
+   *                          the attributes defined for this entry
    * @return <code>false</code> if the merge will fail because the index entry
    *         didn't match ours or the working-dir file was dirty and a
    *         conflict occurred
-   * @throws MissingObjectException
-   * @throws IncorrectObjectTypeException
-   * @throws CorruptObjectException
-   * @throws IOException
-   * @since 3.5
+   * @throws org.eclipse.jgit.errors.MissingObjectException
+   * @throws org.eclipse.jgit.errors.IncorrectObjectTypeException
+   * @throws org.eclipse.jgit.errors.CorruptObjectException
+   * @throws java.io.IOException
+   * @since 4.9
    */
   @Override
   protected boolean processEntry(CanonicalTreeParser base, CanonicalTreeParser ours, CanonicalTreeParser theirs,
-      DirCacheBuildIterator index, WorkingTreeIterator work, boolean ignoreConflicts)
+      DirCacheBuildIterator index, WorkingTreeIterator work, boolean ignoreConflicts, Attributes attributes)
       throws MissingObjectException, IncorrectObjectTypeException, CorruptObjectException, IOException {
     this.enterSubtree = true;
     final int modeO = this.tw.getRawMode(T_OURS);
@@ -785,7 +788,7 @@ public class UnleashGitMerger extends ResolveMerger {
    * Writes merged file content to the working tree.
    *
    * @param result
-   *          the result of the content merge
+   *                 the result of the content merge
    * @return the working tree file to which the merged content was written.
    * @throws FileNotFoundException
    * @throws IOException
@@ -832,11 +835,11 @@ public class UnleashGitMerger extends ResolveMerger {
    * mergeable. Return {@link FileMode#MISSING} int that case.
    *
    * @param modeB
-   *          filemode found in BASE
+   *                filemode found in BASE
    * @param modeO
-   *          filemode found in OURS
+   *                filemode found in OURS
    * @param modeT
-   *          filemode found in THEIRS
+   *                filemode found in THEIRS
    *
    * @return the merged filemode or {@link FileMode#MISSING} in case of a
    *         conflict
@@ -856,13 +859,6 @@ public class UnleashGitMerger extends ResolveMerger {
     return FileMode.MISSING.getBits();
   }
 
-  private static RawText getRawText(ObjectId id, ObjectReader reader) throws IOException {
-    if (id.equals(ObjectId.zeroId())) {
-      return new RawText(new byte[] {});
-    }
-    return new RawText(reader.open(id, OBJ_BLOB).getCachedBytes());
-  }
-
   private static boolean nonTree(final int mode) {
     return mode != 0 && !FileMode.TREE.equals(mode);
   }
@@ -878,8 +874,8 @@ public class UnleashGitMerger extends ResolveMerger {
 
   /**
    * @param commitNames
-   *          the names of the commits as they would appear in conflict
-   *          markers
+   *                      the names of the commits as they would appear in conflict
+   *                      markers
    */
   @Override
   public void setCommitNames(String[] commitNames) {
@@ -967,7 +963,7 @@ public class UnleashGitMerger extends ResolveMerger {
    * is responsible to release the lock.
    *
    * @param dc
-   *          the DirCache to set
+   *             the DirCache to set
    */
   @Override
   public void setDirCache(DirCache dc) {
@@ -984,7 +980,7 @@ public class UnleashGitMerger extends ResolveMerger {
    * merger will be able to merge with a different working tree abstraction.
    *
    * @param workingTreeIterator
-   *          the workingTreeIt to set
+   *                              the workingTreeIt to set
    */
   @Override
   public void setWorkingTreeIterator(WorkingTreeIterator workingTreeIterator) {
@@ -998,24 +994,24 @@ public class UnleashGitMerger extends ResolveMerger {
    * @param headTree
    * @param mergeTree
    * @param ignoreConflicts
-   *          Controls what to do in case a content-merge is done and a
-   *          conflict is detected. The default setting for this should be
-   *          <code>false</code>. In this case the working tree file is
-   *          filled with new content (containing conflict markers) and the
-   *          index is filled with multiple stages containing BASE, OURS and
-   *          THEIRS content. Having such non-0 stages is the sign to git
-   *          tools that there are still conflicts for that path.
-   *          <p>
-   *          If <code>true</code> is specified the behavior is different.
-   *          In case a conflict is detected the working tree file is again
-   *          filled with new content (containing conflict markers). But
-   *          also stage 0 of the index is filled with that content. No
-   *          other stages are filled. Means: there is no conflict on that
-   *          path but the new content (including conflict markers) is
-   *          stored as successful merge result. This is needed in the
-   *          context of {@link RecursiveMerger} where when determining
-   *          merge bases we don't want to deal with content-merge
-   *          conflicts.
+   *                          Controls what to do in case a content-merge is done and a
+   *                          conflict is detected. The default setting for this should be
+   *                          <code>false</code>. In this case the working tree file is
+   *                          filled with new content (containing conflict markers) and the
+   *                          index is filled with multiple stages containing BASE, OURS and
+   *                          THEIRS content. Having such non-0 stages is the sign to git
+   *                          tools that there are still conflicts for that path.
+   *                          <p>
+   *                          If <code>true</code> is specified the behavior is different.
+   *                          In case a conflict is detected the working tree file is again
+   *                          filled with new content (containing conflict markers). But
+   *                          also stage 0 of the index is filled with that content. No
+   *                          other stages are filled. Means: there is no conflict on that
+   *                          path but the new content (including conflict markers) is
+   *                          stored as successful merge result. This is needed in the
+   *                          context of {@link RecursiveMerger} where when determining
+   *                          merge bases we don't want to deal with content-merge
+   *                          conflicts.
    * @return whether the trees merged cleanly
    * @throws IOException
    * @since 3.5
@@ -1076,10 +1072,10 @@ public class UnleashGitMerger extends ResolveMerger {
    * Process the given TreeWalk's entries.
    *
    * @param treeWalk
-   *          The walk to iterate over.
+   *                          The walk to iterate over.
    * @param ignoreConflicts
-   *          see
-   *          {@link UnleashGitMerger#mergeTrees(AbstractTreeIterator, RevTree, RevTree, boolean)}
+   *                          see
+   *                          {@link UnleashGitMerger#mergeTrees(AbstractTreeIterator, RevTree, RevTree, boolean)}
    * @return Whether the trees merged cleanly.
    * @throws IOException
    * @since 3.5
@@ -1087,11 +1083,13 @@ public class UnleashGitMerger extends ResolveMerger {
   @Override
   protected boolean mergeTreeWalk(TreeWalk treeWalk, boolean ignoreConflicts) throws IOException {
     boolean hasWorkingTreeIterator = this.tw.getTreeCount() > T_FILE;
+    boolean hasAttributeNodeProvider = treeWalk.getAttributesNodeProvider() != null;
     while (treeWalk.next()) {
       if (!processEntry(treeWalk.getTree(T_BASE, CanonicalTreeParser.class),
           treeWalk.getTree(T_OURS, CanonicalTreeParser.class), treeWalk.getTree(T_THEIRS, CanonicalTreeParser.class),
           treeWalk.getTree(T_INDEX, DirCacheBuildIterator.class),
-          hasWorkingTreeIterator ? treeWalk.getTree(T_FILE, WorkingTreeIterator.class) : null, ignoreConflicts)) {
+          hasWorkingTreeIterator ? treeWalk.getTree(T_FILE, WorkingTreeIterator.class) : null, ignoreConflicts,
+          hasAttributeNodeProvider ? treeWalk.getAttributes() : new Attributes())) {
         cleanUp();
         return false;
       }
