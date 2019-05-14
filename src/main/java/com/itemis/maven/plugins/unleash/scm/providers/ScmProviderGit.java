@@ -1184,6 +1184,7 @@ public class ScmProviderGit implements ScmProvider {
 
   private void setAuthenticationDetails(TransportCommand<?, ?> command) {
     command.setCredentialsProvider(this.credentialsProvider);
+    /****
     command.setTransportConfigCallback(new TransportConfigCallback() {
       @Override
       public void configure(Transport transport) {
@@ -1197,5 +1198,6 @@ public class ScmProviderGit implements ScmProvider {
         return transport instanceof SshTransport;
       }
     });
+    ***/
   }
 }
